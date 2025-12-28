@@ -1,28 +1,111 @@
 import { Router, Request, Response } from 'express';
 import os from 'os';
+import { config } from '../config';
+import { browserPool } from '../services/browser-pool';
+import { cacheStats } from '../utils/cache';
+import { apiKeyAuth } from '../middleware/auth';
+import type { ServiceHealth } from '../types';
 
 const router = Router();
-const startTime = Date.now();
+const startTime = new Date();
 
+/**
+ * GET /health (no auth required)
+ * Basic health check for monitoring tools
+ */
 router.get('/', (_req: Request, res: Response) => {
-  const uptime = Math.floor((Date.now() - startTime) / 1000);
+  const uptimeSeconds = Math.floor((Date.now() - startTime.getTime()) / 1000);
+  const browserStatus = browserPool.getStatus();
+
+  // Determine overall status
+  let status: ServiceHealth['status'] = 'operational';
+  if (browserStatus.status === 'error') {
+    status = 'degraded';
+  }
+
+  const health: ServiceHealth = {
+    status,
+    version: config.version,
+    uptime: uptimeSeconds,
+    uptimeFormatted: formatUptime(uptimeSeconds),
+    startedAt: startTime.toISOString(),
+    system: {
+      hostname: os.hostname(),
+      platform: os.platform(),
+      arch: os.arch(),
+      nodeVersion: process.version,
+      memory: {
+        free: Math.round(os.freemem() / 1024 / 1024),
+        total: Math.round(os.totalmem() / 1024 / 1024),
+        usagePercent: Math.round((1 - os.freemem() / os.totalmem()) * 100),
+      },
+      cpu: {
+        model: os.cpus()[0]?.model || 'Unknown',
+        cores: os.cpus().length,
+      },
+    },
+    browser: browserStatus,
+    cache: cacheStats(),
+  };
+
+  res.json(health);
+});
+
+/**
+ * GET /health/detailed (auth required)
+ * Detailed health info with full diagnostics
+ */
+router.get('/detailed', apiKeyAuth, (_req: Request, res: Response) => {
+  const uptimeSeconds = Math.floor((Date.now() - startTime.getTime()) / 1000);
+  const browserStatus = browserPool.getStatus();
+  const cache = cacheStats();
 
   res.json({
-    status: 'healthy',
-    uptime,
-    uptimeFormatted: formatUptime(uptime),
-    version: process.env.npm_package_version || '1.0.0',
-    timestamp: new Date().toISOString(),
-    system: {
-      platform: os.platform(),
-      hostname: os.hostname(),
-      memory: {
-        total: Math.round(os.totalmem() / 1024 / 1024) + 'MB',
-        free: Math.round(os.freemem() / 1024 / 1024) + 'MB',
-        usage: Math.round((1 - os.freemem() / os.totalmem()) * 100) + '%',
-      },
-      cpu: os.cpus()[0]?.model || 'Unknown',
+    status: browserStatus.status === 'error' ? 'degraded' : 'operational',
+    version: config.version,
+    uptime: uptimeSeconds,
+    uptimeFormatted: formatUptime(uptimeSeconds),
+    startedAt: startTime.toISOString(),
+    config: {
+      port: config.port,
+      nodeEnv: config.nodeEnv,
+      browserMaxContexts: config.browserMaxContexts,
+      cacheMaxSize: config.cacheMaxSize,
+      cacheTtlSeconds: config.cacheTtlSeconds,
+      rateLimitMaxRequests: config.rateLimitMaxRequests,
     },
+    system: {
+      hostname: os.hostname(),
+      platform: os.platform(),
+      arch: os.arch(),
+      nodeVersion: process.version,
+      memory: {
+        free: Math.round(os.freemem() / 1024 / 1024),
+        total: Math.round(os.totalmem() / 1024 / 1024),
+        usagePercent: Math.round((1 - os.freemem() / os.totalmem()) * 100),
+      },
+      cpu: {
+        model: os.cpus()[0]?.model || 'Unknown',
+        cores: os.cpus().length,
+        load: os.loadavg(),
+      },
+    },
+    browser: browserStatus,
+    cache,
+    environment: {
+      hasApiKey: !!process.env.API_KEY,
+    },
+  });
+});
+
+/**
+ * GET /ping (no auth required)
+ * Simple ping for uptime monitoring
+ */
+router.get('/ping', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
   });
 });
 

@@ -1,10 +1,14 @@
-# Universal Residential Content Service
+# DisRad Residential Service 2.0
 
-A comprehensive residential content fetching service for Disruption Radar. Provides YouTube transcript extraction, universal webpage content scraping via Playwright, and Twitter content retrieval - all from a residential IP to bypass cloud IP blocks.
+Disruption Radar Residential Content Service - a comprehensive content fetching service that provides YouTube transcript extraction, universal webpage content scraping via Playwright, and Twitter/X content retrieval from a residential IP to bypass cloud IP blocks.
+
+## Why Residential IP?
+
+Many content sources (YouTube, Twitter/X, protected websites) block or rate-limit requests from cloud IP addresses (AWS, Vercel, Google Cloud). This service runs on a Windows PC with a residential IP address, routing through Cloudflare Tunnel, to achieve near 100% content extraction success rates.
 
 ## Features
 
-- **YouTube Transcripts**: Fetch video transcripts using yt-dlp (more reliable than npm packages)
+- **YouTube Transcripts**: Fetch video transcripts using the youtube-transcript library
 - **Universal Content Extraction**: Scrape any webpage using Playwright browser automation
 - **Twitter/X Content**: Extract tweets and Twitter articles
 - **Browser Pool**: Managed Chromium instances with automatic cleanup
@@ -13,6 +17,7 @@ A comprehensive residential content fetching service for Disruption Radar. Provi
 - **Rate Limiting**: 100 requests/minute per IP
 - **Comprehensive Metrics**: Track success rates, latency, and errors
 - **Health Monitoring**: Detailed health endpoint with browser status
+- **Version Compatibility**: API versioning for client compatibility
 
 ## Tech Stack
 
@@ -20,7 +25,6 @@ A comprehensive residential content fetching service for Disruption Radar. Provi
 - **Language**: TypeScript
 - **Framework**: Express.js
 - **Browser Automation**: Playwright (Chromium)
-- **YouTube**: yt-dlp CLI
 - **Caching**: LRU Cache
 - **Logging**: Winston
 
@@ -28,8 +32,8 @@ A comprehensive residential content fetching service for Disruption Radar. Provi
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd residential-service-new
+git clone https://github.com/devenspear/disrad-residential-service-2.0.git
+cd DisRad-Residential-Service-2.0
 
 # Install dependencies
 npm install
@@ -40,19 +44,22 @@ npx playwright install chromium
 # Create environment file
 cp .env.example .env
 # Edit .env with your configuration
+
+# Build TypeScript
+npm run build
+
+# Start the service
+npm start
 ```
 
 ### Prerequisites
 
 - Node.js 20+
-- yt-dlp installed and in PATH (for YouTube transcripts)
-  ```cmd
-  winget install yt-dlp
-  ```
+- Chromium (installed via Playwright)
 
 ## Configuration
 
-Create a `.env` file:
+Create a `.env` file based on `.env.example`:
 
 ```env
 # Server
@@ -73,13 +80,10 @@ BROWSER_PAGE_TIMEOUT_MS=30000
 
 # Cache
 CACHE_MAX_SIZE=100
-CACHE_TTL_SECONDS=300
+CACHE_TTL_SECONDS=3600
 
 # Logging
 LOG_LEVEL=info
-
-# yt-dlp path (Windows)
-YT_DLP_PATH=C:\Users\Deven Spear\AppData\Local\Microsoft\WinGet\Links\yt-dlp.exe
 ```
 
 ## Running the Service
@@ -88,110 +92,72 @@ YT_DLP_PATH=C:\Users\Deven Spear\AppData\Local\Microsoft\WinGet\Links\yt-dlp.exe
 # Development mode (with hot reload)
 npm run dev
 
-# Production build
+# Production build and start
 npm run build
 npm start
 ```
 
 ## API Endpoints
 
-### Public Endpoints (No Auth)
+### Public Endpoints (No Auth Required)
 
-#### Ping
-```
-GET /ping
-```
-Simple health check for monitoring tools like Uptime Kuma.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-12-28T04:00:00.000Z"
-}
-```
+| Endpoint | Description |
+|----------|-------------|
+| `GET /ping` | Simple health check for monitoring tools |
+| `GET /health` | Service health with browser and cache status |
+| `GET /version` | Service version information |
 
 ### Authenticated Endpoints
 
 All authenticated endpoints require the `X-API-Key` header.
 
-#### Health Check
-```
-GET /health
-```
+#### YouTube Transcripts
 
-Returns detailed service status including browser pool state.
+| Endpoint | Description |
+|----------|-------------|
+| `GET /transcript?videoId={id}` | Fetch transcript for a video |
+| `POST /transcript/batch` | Fetch transcripts for multiple videos |
+| `GET /transcript/cache` | Get cache statistics |
+| `DELETE /transcript/cache` | Clear transcript cache |
 
-**Response:**
-```json
-{
-  "status": "operational",
-  "version": "1.0.0",
-  "uptime": 3600,
-  "uptimeFormatted": "1h 0m 0s",
-  "startedAt": "2025-12-28T03:00:00.000Z",
-  "system": {
-    "hostname": "DevOfficeMiniPC",
-    "platform": "win32",
-    "arch": "x64",
-    "nodeVersion": "v24.12.0",
-    "memory": { "free": 4000, "total": 8000, "usagePercent": 50 },
-    "cpu": { "model": "Intel(R) N95", "cores": 4 }
-  },
-  "browser": {
-    "status": "ready",
-    "version": "143.0.7499.4",
-    "activeContexts": 0,
-    "maxContexts": 3,
-    "totalPagesCreated": 0
-  }
-}
-```
-
-#### Fetch YouTube Transcript
-```
-GET /transcript?videoId=<video-id>&language=<optional>
-POST /transcript (body: { videoId, language })
-```
-
-**Query Parameters / Body:**
+**Request Parameters:**
 - `videoId` (required): YouTube video ID or full URL
 - `language` (optional): Language code (default: `en`)
 
-**Response:**
+**Example Response:**
 ```json
 {
   "success": true,
   "videoId": "dQw4w9WgXcQ",
-  "segments": [
-    { "text": "Never gonna give you up", "start": 18.8, "duration": 3.5 }
-  ],
-  "fullText": "Never gonna give you up...",
-  "wordCount": 291,
-  "language": "en",
-  "source": "yt-dlp",
-  "fetchTimeMs": 5067
+  "transcript": {
+    "fullText": "Never gonna give you up...",
+    "segments": [
+      { "text": "Never gonna give you up", "start": 18.8, "duration": 3.5 }
+    ],
+    "language": "en",
+    "wordCount": 291
+  },
+  "fetchTimeMs": 2500
 }
 ```
 
-#### Fetch Universal Content (Playwright)
-```
-POST /content/fetch
-```
+#### Universal Content Extraction
 
-Extracts content from any webpage using Playwright browser automation.
+| Endpoint | Description |
+|----------|-------------|
+| `POST /content/fetch` | Extract content from any URL |
+| `GET /content/fetch?url={url}` | Alternative GET endpoint |
 
-**Body:**
+**Request Body:**
 ```json
 {
   "url": "https://example.com",
-  "contentType": "auto",
   "waitFor": ".article-body",
   "timeout": 30000
 }
 ```
 
-**Response:**
+**Example Response:**
 ```json
 {
   "success": true,
@@ -202,63 +168,47 @@ Extracts content from any webpage using Playwright browser automation.
   "metadata": {
     "title": "Page Title",
     "author": "Author Name",
-    "publishedAt": "2025-01-01",
     "wordCount": 500,
-    "fetchedAt": "2025-12-28T04:00:00.000Z",
     "method": "playwright",
     "latencyMs": 2500
   }
 }
 ```
 
-#### Fetch Twitter Content
-```
-POST /twitter/content
-```
+#### Twitter/X Content
 
-Extracts content from Twitter/X posts and articles.
+| Endpoint | Description |
+|----------|-------------|
+| `POST /twitter/content` | Extract content from a tweet |
+| `GET /twitter/content?url={url}` | Alternative GET endpoint |
+| `POST /twitter/validate` | Validate a Twitter URL |
 
-**Body:**
+**Request Body:**
 ```json
 {
-  "url": "https://twitter.com/user/status/123456789"
+  "url": "https://x.com/user/status/123456789"
 }
 ```
 
-#### Get Metrics
-```
-GET /metrics
-```
+#### Metrics
 
-Returns usage statistics and error rates.
+| Endpoint | Description |
+|----------|-------------|
+| `GET /metrics?period={1h\|24h}` | Get metrics summary |
+| `GET /metrics/cache` | Get cache statistics |
+| `GET /metrics/browser` | Get browser pool status |
+| `DELETE /metrics` | Clear all metrics |
 
-**Response:**
-```json
-{
-  "summary": {
-    "totalRequests24h": 150,
-    "successRate24h": 95.5,
-    "avgLatencyMs": 3200
-  },
-  "byContentType": {
-    "youtube": { "requests": 100, "success": 98, "avgLatency": 5000 },
-    "playwright": { "requests": 50, "success": 45, "avgLatency": 2500 }
-  },
-  "errors": {
-    "TranscriptNotFound": 5,
-    "Timeout": 2
-  },
-  "cache": {
-    "size": 50,
-    "maxSize": 100,
-    "hitRate": 0.35
-  }
-}
-```
+#### Version Compatibility
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /version/check` | Check client version compatibility |
+| `GET /version/features` | List supported features |
 
 ## Error Types
 
-The service returns specific error types to help with handling:
+The service returns specific error types for proper error handling:
 
 | Error Type | Description | Retryable |
 |------------|-------------|-----------|
@@ -274,13 +224,13 @@ The service returns specific error types to help with handling:
 
 ## Deployment
 
-The service runs on **Windows Server** at `192.168.0.50:3100` behind a Cloudflare Tunnel.
+The service is designed to run on a Windows PC with a residential IP address behind a Cloudflare Tunnel.
 
 **Public URL:** `https://transcript.cloudtunnel.dev`
 
 ### Windows Service Management
 
-The service runs via Windows Task Scheduler:
+The service can run via Windows Task Scheduler:
 
 ```cmd
 # Start the service
@@ -288,89 +238,9 @@ schtasks /run /tn "ResidentialContentService"
 
 # Check status
 schtasks /query /tn "ResidentialContentService"
-
-# View running task
-schtasks /query /tn "ResidentialContentService" /v /fo list
 ```
 
-### Directory Structure
-
-```
-C:\Projects\
-├── residential-service-new/   # Active service
-└── uptime-kuma/               # Monitoring dashboard
-```
-
----
-
-## Monitoring with Uptime Kuma
-
-The service is monitored using [Uptime Kuma](https://github.com/louislam/uptime-kuma).
-
-**Dashboard:** `http://192.168.0.50:3001`
-
-### Service Management
-
-```cmd
-# Start Uptime Kuma
-schtasks /run /tn "UptimeKuma"
-
-# Check Status
-schtasks /query /tn "UptimeKuma"
-```
-
-### Monitor Configuration
-
-| Setting | Value |
-|---------|-------|
-| Monitor Type | HTTP(s) |
-| URL | `http://localhost:3100/health` |
-| Heartbeat Interval | 60 seconds |
-| Retries | 3 |
-
-### Auto-Start on Boot
-
-Both services are configured to auto-start via Windows Task Scheduler:
-- `ResidentialContentService` - Content API (port 3100)
-- `UptimeKuma` - Monitoring dashboard (port 3001)
-
----
-
-## Project Structure
-
-```
-residential-service-new/
-├── src/
-│   ├── index.ts                    # Express app entry point
-│   ├── config.ts                   # Configuration management
-│   ├── middleware/
-│   │   ├── auth.ts                 # API key authentication
-│   │   ├── rate-limit.ts           # Rate limiting
-│   │   └── metrics.ts              # Request metrics tracking
-│   ├── routes/
-│   │   ├── health.ts               # Health check endpoint
-│   │   ├── transcript.ts           # YouTube transcript endpoints
-│   │   ├── content.ts              # Universal content extraction
-│   │   ├── twitter.ts              # Twitter content extraction
-│   │   └── metrics.ts              # Metrics endpoint
-│   ├── services/
-│   │   ├── youtube-transcript.ts   # yt-dlp based transcript fetching
-│   │   ├── content-extractor.ts    # Playwright content extraction
-│   │   ├── twitter-extractor.ts    # Twitter scraping
-│   │   └── browser-pool.ts         # Chromium browser pool management
-│   ├── utils/
-│   │   ├── logger.ts               # Winston logger config
-│   │   └── cache.ts                # LRU cache implementation
-│   └── types/
-│       └── index.ts                # TypeScript type definitions
-├── dist/                           # Compiled JavaScript
-├── .env                            # Environment configuration
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
-## Integration with Disruption Radar
+## Integration with Disruption Radar 2.0
 
 This service integrates with Disruption Radar 2.0 via the residential client:
 
@@ -391,7 +261,50 @@ const content = await residentialClient.fetchContentWithRetry({
 
 // Check service health
 const health = await residentialClient.getHealth();
+
+// Check version compatibility
+const compat = await residentialClient.checkVersion('2.0.0');
 ```
+
+## Project Structure
+
+```
+DisRad-Residential-Service-2.0/
+├── src/
+│   ├── index.ts                    # Express app entry point
+│   ├── config.ts                   # Configuration management
+│   ├── middleware/
+│   │   ├── auth.ts                 # API key authentication
+│   │   ├── logging.ts              # Request logging
+│   │   ├── metrics.ts              # Metrics tracking
+│   │   └── rateLimit.ts            # Rate limiting
+│   ├── routes/
+│   │   ├── health.ts               # Health check endpoints
+│   │   ├── transcript.ts           # YouTube transcript endpoints
+│   │   ├── content.ts              # Universal content extraction
+│   │   ├── twitter.ts              # Twitter content extraction
+│   │   ├── metrics.ts              # Metrics endpoint
+│   │   └── version.ts              # Version compatibility
+│   ├── services/
+│   │   ├── youtube.ts              # YouTube transcript service
+│   │   ├── content-extractor.ts    # Playwright content extraction
+│   │   ├── twitter-extractor.ts    # Twitter scraping
+│   │   └── browser-pool.ts         # Chromium browser pool
+│   ├── utils/
+│   │   ├── logger.ts               # Winston logger
+│   │   └── cache.ts                # LRU cache
+│   └── types/
+│       └── index.ts                # TypeScript types
+├── dist/                           # Compiled JavaScript
+├── .env.example                    # Environment template
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+## Version History
+
+- **2.0.0** - Complete rewrite with Playwright, Twitter support, metrics, and version compatibility
 
 ## License
 
