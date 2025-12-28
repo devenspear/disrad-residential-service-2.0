@@ -96,14 +96,17 @@ async function fetchWithYtDlp(
 
     // Check if any subtitles exist
     const hasAutoSubs = listOutput.includes('Available automatic captions');
-    const hasManualSubs = listOutput.includes('Available subtitles');
+    // Check for manual subs that aren't just live_chat
+    const manualSubsSection = listOutput.split('Available subtitles')[1]?.split('Available automatic captions')[0] || '';
+    const hasManualEnglishSubs = manualSubsSection.includes('en ') || manualSubsSection.match(/^en\s/m);
 
-    if (!hasAutoSubs && !hasManualSubs) {
+    if (!hasAutoSubs && !hasManualEnglishSubs) {
       return createErrorResult(videoId, 'No captions available for this video', 'TranscriptNotFound', startTime);
     }
 
-    // Determine subtitle type to fetch (prefer manual over auto)
-    const subType = hasManualSubs ? '--write-subs' : '--write-auto-subs';
+    // Determine subtitle type to fetch (prefer manual English over auto)
+    // Use auto subs unless we have manual English subs (not just live_chat)
+    const subType = hasManualEnglishSubs ? '--write-subs' : '--write-auto-subs';
 
     // Fetch subtitles as VTT format to temp file
     const fetchCmd = `"${YT_DLP_PATH}" ${subType} --sub-langs "${lang}" --sub-format vtt --skip-download -o "${tempBase}" "${url}" 2>&1`;
