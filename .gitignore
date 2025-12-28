@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# pnpm lock file (local only - Vercel uses npm)
+pnpm-lock.yaml
