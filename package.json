@@ -1,6 +1,6 @@
 {
   "name": "disrad-residential-service",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Disruption Radar Residential Content Service - fetches YouTube transcripts, Twitter/X content, and web pages via residential IP",
   "main": "dist/index.js",
   "repository": {

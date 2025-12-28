@@ -8,9 +8,9 @@ Many content sources (YouTube, Twitter/X, protected websites) block or rate-limi
 
 ## Features
 
-- **YouTube Transcripts**: Fetch video transcripts using the youtube-transcript library
-- **Universal Content Extraction**: Scrape any webpage using Playwright browser automation
-- **Twitter/X Content**: Extract tweets and Twitter articles
+- **YouTube Transcripts**: Dual-method extraction using yt-dlp CLI (primary) with youtube-transcript npm fallback
+- **Universal Content Extraction**: Scrape any webpage using Playwright with site-specific selectors
+- **Twitter/X Content**: Extract tweets via Nitter instances (no login required) with Twitter fallback
 - **Browser Pool**: Managed Chromium instances with automatic cleanup
 - **LRU Caching**: In-memory caching with configurable TTL
 - **API Key Authentication**: Secure access control
@@ -25,6 +25,7 @@ Many content sources (YouTube, Twitter/X, protected websites) block or rate-limi
 - **Language**: TypeScript
 - **Framework**: Express.js
 - **Browser Automation**: Playwright (Chromium)
+- **YouTube Extraction**: yt-dlp CLI + youtube-transcript npm
 - **Caching**: LRU Cache
 - **Logging**: Winston
 
@@ -56,6 +57,25 @@ npm start
 
 - Node.js 20+
 - Chromium (installed via Playwright)
+- yt-dlp CLI (for YouTube transcripts)
+
+#### Installing yt-dlp
+
+**Windows (via winget):**
+```cmd
+winget install yt-dlp
+```
+
+**macOS (via Homebrew):**
+```bash
+brew install yt-dlp
+```
+
+**Linux:**
+```bash
+sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+sudo chmod a+rx /usr/local/bin/yt-dlp
+```
 
 ## Configuration
 
@@ -84,6 +104,9 @@ CACHE_TTL_SECONDS=3600
 
 # Logging
 LOG_LEVEL=info
+
+# YouTube (optional - defaults to 'yt-dlp' in PATH)
+YT_DLP_PATH=C:\Users\Username\AppData\Local\Microsoft\WinGet\Links\yt-dlp.exe
 ```
 
 ## Running the Service
@@ -304,6 +327,11 @@ DisRad-Residential-Service-2.0/
 
 ## Version History
 
+- **2.0.1** - Enhanced content extraction
+  - YouTube: Added yt-dlp CLI as primary extraction method (more reliable than npm library)
+  - Twitter: Added Nitter fallback for login-free tweet extraction
+  - Content: Site-specific selectors for Substack, Medium, LinkedIn, Notion
+  - Fixed Windows path handling for temp files
 - **2.0.0** - Complete rewrite with Playwright, Twitter support, metrics, and version compatibility
 
 ## License
