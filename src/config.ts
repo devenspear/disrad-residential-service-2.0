@@ -1,7 +1,21 @@
 import dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
 import { logger } from './utils/logger';
 
 dotenv.config();
+
+// Read version from package.json
+function getVersion(): string {
+  try {
+    const packagePath = path.join(__dirname, '..', 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
+    return packageJson.version || '2.0.1';
+  } catch {
+    return '2.0.1';
+  }
+}
+const VERSION = getVersion();
 
 function requiredEnv(key: string): string {
   const value = process.env[key];
@@ -48,7 +62,7 @@ export const config = {
   logLevel: optionalEnv('LOG_LEVEL', 'info'),
 
   // Service metadata
-  version: '2.0.0',
+  version: VERSION,
   serviceName: 'DisRad-Residential-Service',
 } as const;
 
