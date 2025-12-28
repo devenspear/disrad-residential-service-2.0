@@ -103,19 +103,21 @@ async function fetchWithYtDlp(
 
     await execAsync(fetchCmd, { timeout: 90000 });
 
-    // Find the downloaded VTT file
+    // Find the downloaded VTT file - yt-dlp creates files like: {output}.{lang}.vtt
+    const tempBasename = path.basename(tempBase);
     const files = await readdirAsync(tempDir);
-    const vttFile = files.find(f => f.startsWith(`yt_${videoId}_`) && f.endsWith('.vtt'));
+    const vttFile = files.find(f => f.startsWith(tempBasename) && f.endsWith('.vtt'));
 
     if (!vttFile) {
       logger.warn(`No VTT file found for ${videoId} in ${tempDir}`);
       // List what files we do have
-      const matchingFiles = files.filter(f => f.startsWith(`yt_${videoId}_`));
-      logger.info(`Found files: ${matchingFiles.join(', ')}`);
+      const matchingFiles = files.filter(f => f.includes(videoId) || f.startsWith('yt_'));
+      logger.info(`Found files: ${matchingFiles.slice(0, 10).join(', ')}`);
       return createErrorResult(videoId, 'Could not download subtitles', 'TranscriptNotFound', startTime);
     }
 
     const vttPath = path.join(tempDir, vttFile);
+    logger.info(`Found VTT file: ${vttFile}`);
     const vttContent = await readFileAsync(vttPath, 'utf-8');
 
     // Clean up temp file
@@ -151,8 +153,9 @@ async function fetchWithYtDlp(
 
     // Clean up any temp files
     try {
+      const tempBasenameForCleanup = path.basename(tempBase);
       const files = await readdirAsync(tempDir);
-      for (const f of files.filter(f => f.startsWith(`yt_${videoId}_`))) {
+      for (const f of files.filter(f => f.startsWith(tempBasenameForCleanup))) {
         await unlinkAsync(path.join(tempDir, f)).catch(() => {});
       }
     } catch { /* ignore */ }
