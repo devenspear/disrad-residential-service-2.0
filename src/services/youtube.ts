@@ -68,8 +68,16 @@ async function fetchWithYtDlp(
 ): Promise<TranscriptResult> {
   const lang = language || 'en';
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const tempDir = os.tmpdir();
+  // Use C:\temp on Windows to avoid path issues with spaces
+  const tempDir = process.platform === 'win32' ? 'C:\\temp' : os.tmpdir();
   const tempBase = path.join(tempDir, `yt_${videoId}_${Date.now()}`);
+
+  // Ensure temp directory exists on Windows
+  if (process.platform === 'win32') {
+    try {
+      await fs.promises.mkdir(tempDir, { recursive: true });
+    } catch { /* ignore */ }
+  }
 
   try {
     // First, check if subtitles are available
