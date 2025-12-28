@@ -1,11 +1,17 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { YoutubeTranscript } from 'youtube-transcript';
 import { logger } from '../utils/logger';
 import { cacheGet, cacheSet, generateCacheKey } from '../utils/cache';
 import type { TranscriptResult, TranscriptSegment, TranscriptErrorType } from '../types';
 
 const execAsync = promisify(exec);
+const readFileAsync = promisify(fs.readFile);
+const unlinkAsync = promisify(fs.unlink);
+const readdirAsync = promisify(fs.readdir);
 
 // yt-dlp path - can be overridden via env var
 const YT_DLP_PATH = process.env.YT_DLP_PATH || 'yt-dlp';
@@ -62,11 +68,14 @@ async function fetchWithYtDlp(
 ): Promise<TranscriptResult> {
   const lang = language || 'en';
   const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const tempDir = os.tmpdir();
+  const tempBase = path.join(tempDir, `yt_${videoId}_${Date.now()}`);
 
   try {
     // First, check if subtitles are available
     const listCmd = `"${YT_DLP_PATH}" --list-subs --skip-download "${url}" 2>&1`;
-    const { stdout: listOutput } = await execAsync(listCmd, { timeout: 30000 });
+    logger.info(`Running: ${listCmd}`);
+    const { stdout: listOutput } = await execAsync(listCmd, { timeout: 60000 });
 
     // Check for common errors in list output
     if (listOutput.includes('Video unavailable') || listOutput.includes('Private video')) {
@@ -87,23 +96,33 @@ async function fetchWithYtDlp(
 
     // Determine subtitle type to fetch (prefer manual over auto)
     const subType = hasManualSubs ? '--write-subs' : '--write-auto-subs';
-    const subLang = hasManualSubs ? `--sub-langs "${lang}"` : `--sub-langs "${lang}.*"`;
 
-    // Fetch subtitles as JSON
-    const fetchCmd = `"${YT_DLP_PATH}" ${subType} ${subLang} --sub-format json3 --skip-download -o "-" "${url}" 2>&1`;
+    // Fetch subtitles as VTT format to temp file
+    const fetchCmd = `"${YT_DLP_PATH}" ${subType} --sub-langs "${lang}" --sub-format vtt --skip-download -o "${tempBase}" "${url}" 2>&1`;
+    logger.info(`Running: ${fetchCmd}`);
 
-    const { stdout } = await execAsync(fetchCmd, { timeout: 60000 });
+    await execAsync(fetchCmd, { timeout: 90000 });
 
-    // Find the JSON subtitle file content in output
-    const jsonMatch = stdout.match(/\{[\s\S]*"events"[\s\S]*\}/);
+    // Find the downloaded VTT file
+    const files = await readdirAsync(tempDir);
+    const vttFile = files.find(f => f.startsWith(`yt_${videoId}_`) && f.endsWith('.vtt'));
 
-    if (!jsonMatch) {
-      // Try alternative: fetch as VTT and parse
-      return await fetchWithYtDlpVtt(videoId, lang, startTime, subType);
+    if (!vttFile) {
+      logger.warn(`No VTT file found for ${videoId} in ${tempDir}`);
+      // List what files we do have
+      const matchingFiles = files.filter(f => f.startsWith(`yt_${videoId}_`));
+      logger.info(`Found files: ${matchingFiles.join(', ')}`);
+      return createErrorResult(videoId, 'Could not download subtitles', 'TranscriptNotFound', startTime);
     }
 
-    const subtitleData = JSON.parse(jsonMatch[0]);
-    const segments = parseJson3Subtitles(subtitleData);
+    const vttPath = path.join(tempDir, vttFile);
+    const vttContent = await readFileAsync(vttPath, 'utf-8');
+
+    // Clean up temp file
+    await unlinkAsync(vttPath).catch(() => {});
+
+    // Parse VTT content
+    const segments = parseVttSubtitles(vttContent);
 
     if (segments.length === 0) {
       return createErrorResult(videoId, 'No transcript content found', 'TranscriptNotFound', startTime);
@@ -111,6 +130,8 @@ async function fetchWithYtDlp(
 
     const fullText = segments.map(s => s.text).join(' ').trim();
     const wordCount = fullText.split(/\s+/).filter(w => w.length > 0).length;
+
+    logger.info(`yt-dlp fetched ${wordCount} words for ${videoId}`);
 
     return {
       success: true,
@@ -128,6 +149,14 @@ async function fetchWithYtDlp(
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     logger.warn(`yt-dlp failed for ${videoId}: ${errorMessage}`);
 
+    // Clean up any temp files
+    try {
+      const files = await readdirAsync(tempDir);
+      for (const f of files.filter(f => f.startsWith(`yt_${videoId}_`))) {
+        await unlinkAsync(path.join(tempDir, f)).catch(() => {});
+      }
+    } catch { /* ignore */ }
+
     // Check for specific errors
     if (errorMessage.includes('command not found') || errorMessage.includes('not recognized')) {
       return createErrorResult(videoId, 'yt-dlp not installed', 'ServerError', startTime);
@@ -138,55 +167,6 @@ async function fetchWithYtDlp(
     }
 
     return createErrorResult(videoId, `yt-dlp error: ${errorMessage}`, 'Unknown', startTime);
-  }
-}
-
-/**
- * Alternative yt-dlp method using VTT format
- */
-async function fetchWithYtDlpVtt(
-  videoId: string,
-  language: string,
-  startTime: number,
-  subType: string
-): Promise<TranscriptResult> {
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
-
-  try {
-    // Use temp file approach for VTT
-    const tempFile = `/tmp/yt_${videoId}_${Date.now()}`;
-    const fetchCmd = `"${YT_DLP_PATH}" ${subType} --sub-langs "${language}.*,${language}" --convert-subs vtt --skip-download -o "${tempFile}" "${url}" 2>&1 && cat "${tempFile}"*.vtt 2>/dev/null`;
-
-    const { stdout } = await execAsync(fetchCmd, { timeout: 60000 });
-
-    // Parse VTT content
-    const segments = parseVttSubtitles(stdout);
-
-    // Cleanup temp files
-    await execAsync(`rm -f "${tempFile}"*.vtt 2>/dev/null`).catch(() => {});
-
-    if (segments.length === 0) {
-      return createErrorResult(videoId, 'Could not parse transcript', 'TranscriptNotFound', startTime);
-    }
-
-    const fullText = segments.map(s => s.text).join(' ').trim();
-    const wordCount = fullText.split(/\s+/).filter(w => w.length > 0).length;
-
-    return {
-      success: true,
-      videoId,
-      transcript: {
-        fullText,
-        segments,
-        language,
-        wordCount,
-      },
-      source: 'yt-dlp',
-      fetchTimeMs: Date.now() - startTime,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return createErrorResult(videoId, `VTT fetch failed: ${errorMessage}`, 'Unknown', startTime);
   }
 }
 
